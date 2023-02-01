@@ -1,5 +1,12 @@
-from cloud_server import app
+from cloud_server import app, db
+from cloud_server.models import Users
+from cloud_server.aws_cloud import AWSCloud, boto3
 from flask import render_template, request, url_for, redirect, send_from_directory, make_response
+import cryptocode as crypto
+import uuid
+import hashlib
+from markupsafe import escape
+
 
 @app.route("/")
 def index():
@@ -7,36 +14,37 @@ def index():
 
 @app.route("/sing_up", methods=["POST", "GET"])
 def sing_up():
+    errors = {"login": False, "password": False, "access_key_id": False, "secret_access_key": False}
     if request.method == "POST":
         try:
-            errors = {"login": False, "password": False, "access_key_id": False, "secret_access_key": False}
-            if request.form['password'] == request.form['check_password']:
+            if request.form['password'] != request.form['check_password']:
                 errors["password"] = True
-            salt = uuid.uuid4().hex
 
-            password = request.form['password']
+                salt = uuid.uuid4().hex
 
-            access_key_id = crypto.encrypt(request.form['ak_id'], password)
-            secret_access_key = crypto.encrypt(request.form['sak'], password)
+                password = request.form['password']
 
-            password = hashlib.sha256(salt.encode() + password.encode()).hexdigest() + ':' + salt
+                access_key_id = crypto.encrypt(request.form['ak_id'], password)
+                secret_access_key = crypto.encrypt(request.form['sak'], password)
 
-            u = Users(login=request.form['login'], password=password, access_key_id=access_key_id, secret_access_key=secret_access_key)
+                password = hashlib.sha256(salt.encode() + password.encode()).hexdigest() + ':' + salt
 
-            db.session.add(u)
-            db.session.commit()
+                u = Users(login=request.form['login'], password=password, access_key_id=access_key_id, secret_access_key=secret_access_key)
 
-            boto3.setup_default_session(aws_access_key_id=request.form['ak_id'], aws_secret_access_key=request.form['sak'])
+                db.session.add(u)
+                db.session.commit()
 
-            return render_template("sing_up.html", title="Welcome!", register_complete="True")
-            # else:
-            #     return render_template("sing_up.html", title="Sing up", errors=errors)
+                boto3.setup_default_session(aws_access_key_id=request.form['ak_id'], aws_secret_access_key=request.form['sak'])
 
-        except:
+                return render_template("sing_up.html", title="Welcome!", register_complete="True")
+
+        except Exception as e:
             db.session.rollback()
-            print("Error adding to database")
+            print(e)
 
-    return render_template("sing_up.html", title="Sing up")
+            errors["login"] = True
+
+    return render_template("sing_up.html", title="Sing up", errors=errors)
 
 @app.route("/sing_in", methods=["POST", "GET"])
 def sing_in():
