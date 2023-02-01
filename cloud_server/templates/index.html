@@ -1,23 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>{{title}}</title>
-</head>
-<body>
-	<header>
-		<h1>Main page</h1>
-		<p>Sing up</p>
-		<p>Sing in</p>
-		<p>Logout</p>
-	</header>
-	<div class="container">
-		<p>My folders</p>
-		<p>Upload</p>
-	</div>
-	<footer>
-		<h2>Our contacts</h2>
-	</footer>
-</body>
-</html>
+{% block header %}
+{% include "includes/header.html" %}
+{% endblock %}
+
+<div class="container">
+	<p>My folders</p>
+	<p>Upload</p>
+</div>
+
+{% block footer %}
+{% include "includes/footer.html" %}
+{% endblock %}
