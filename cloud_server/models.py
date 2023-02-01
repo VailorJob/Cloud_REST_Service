@@ -1,4 +1,4 @@
-from cloud_server import db
+from cloud_server import db, app
 
 
 class Users(db.Model):
@@ -13,5 +13,6 @@ class Users(db.Model):
     def __repr__(self):
         return f"<users_id {self.id}; users_login {self.login}>"
 
-db.create_all()
+with app.app_context():
+    db.create_all()
 
