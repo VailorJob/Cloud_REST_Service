@@ -1,12 +1,12 @@
-{% block header %}
-{% include "includes/header.html" %}
-{% endblock %}
 
+{% include "includes/header.html" %}
+{% block children_css_js %}{% endblock children_css_js %}
+
+{% block body %}
 <div class="container">
 	<p>My folders</p>
 	<p>Upload</p>
 </div>
-
-{% block footer %}
-{% include "includes/footer.html" %}
 {% endblock %}
+
+{% include "includes/footer.html" %}

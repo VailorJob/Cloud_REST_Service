@@ -1,0 +1,15 @@
+{% extends "/index.html" %}
+
+{% block children_css_js %}
+	<link rel="stylesheet" type="text/css" href="{{url_for('static', filename='css/sing_up.css')}}" />
+	<script src="{{url_for('static', filename = 'js/sing_up.js')}}"></script>
+{% endblock children_css_js %}
+
+{% block body %}
+<form action="">
+  <h2><span class="entypo-login"><i class="fa fa-sign-in"></i></span> Sing in</h2>
+  <input type="text" class="user" placeholder="ursername"/>
+  <input type="password" class="pass"placeholder="password"/>
+  <button class="submit"><span class="entypo-lock">Send</i></span></button>
+</form>
+{% endblock %}
