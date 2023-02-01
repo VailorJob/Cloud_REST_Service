@@ -1,30 +1,65 @@
 from flask import Flask, render_template, request, url_for, redirect, send_from_directory, make_response
+from cloud_server.keys import db, Users
+from cloud_server.aws_cloud import AWSCloud, boto3
+import cryptocode as crypto
+import uuid
+import hashlib
 from markupsafe import escape
-import os
+
 
 PROJECT_FOLDER = "cloud_server"
-UPLOAD_FOLDER = "uploads"
 
 app = Flask(__name__)
 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 @app.route("/")
 def index():
     return render_template("index.html", title="Main")
 
-@app.route("/sing_in", methods=["POST"])
-def sing_in():
-    user = get_user(request.form['username'])
-    if user.check_password(request.form['password']):
-        login_user(user)
-        app.logger.info('%s logged in successfully', user.username)
-        return redirect(url_for('index'))
-    else:
-        app.logger.info('%s failed to log in', user.username)
-        abort(401)
+@app.route("/sing_up", methods=["POST", "GET"])
+def sing_up():
+    if request.method == "POST":
+        try:
+            if request.form['password'] == request.form['check_password']:
+                salt = uuid.uuid4().hex
 
-@app.route("/upload", methods=['GET', 'POST'])
+                password = request.form['password']
+
+                access_key_id = crypto.encrypt(request.form['ak_id'], password)
+                secret_access_key = crypto.encrypt(request.form['sak'], password)
+
+                password = hashlib.sha256(salt.encode() + password.encode()).hexdigest() + ':' + salt
+
+                u = Users(login=request.form['login'], password=password, access_key_id=access_key_id, secret_access_key=secret_access_key)
+
+                db.session.add(u)
+                db.session.commit()
+
+                boto3.setup_default_session(aws_access_key_id=request.form['ak_id'], aws_secret_access_key=request.form['sak'])
+
+                return render_template("sing_up.html", title="Welcome!", register_complete="True")
+            else:
+                return render_template("sing_up.html", title="Sing up", password="False")
+
+        except:
+            db.session.rollback()
+            print("Error adding to database")
+
+    return render_template("sing_up.html", title="Sing up")
+
+@app.route("/sing_in", methods=["POST", "GET"])
+def sing_in():
+    if request.method == "POST":
+        user = get_user(request.form['username'])
+        if user.check_password(request.form['password']):
+            login_user(user)
+            app.logger.info('%s logged in successfully', user.username)
+            return redirect(url_for('index'))
+        else:
+            app.logger.info('%s failed to log in', user.username)
+            abort(401)
+
+@app.route("put", methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'POST':
         file = request.files["file"]
@@ -56,8 +91,8 @@ def view_file(name=None):
 
     return ""
 
-@app.route('/download/<path:name>')
-def download_file(name=None):
+@app.route('/get/<path:name>')
+def get_file(name=None):
     if name:
         return send_from_directory(app.config["UPLOAD_FOLDER"], name)
     else:
