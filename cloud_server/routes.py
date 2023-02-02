@@ -23,13 +23,8 @@ def auth_check(foo):
     return wrapper
 
 
-@app.route("/")
-def index():
-    return render_template("index.html", title="Main")
-
-
-@app.route("/api/sing_up", methods=["POST"])
-def sing_up():
+@app.route("/api/sign_up", methods=["POST"])
+def sign_up():
     global AUTHORIZED
     if AUTHORIZED:
         return {"status_code": 200, "message": "Cloud Server. You already authorized"}
@@ -90,8 +85,8 @@ def sing_up():
             db.session.rollback()
 
 
-@app.route("/api/sing_in", methods=["POST"])
-def sing_in():
+@app.route("/api/sign_in", methods=["POST"])
+def sign_in():
     global AUTHORIZED
     if AUTHORIZED:
         return {"status_code": 200, "message": "Cloud Server. You already authorized"}
@@ -159,7 +154,7 @@ def get_file(key):
 
 
 @auth_check
-@app.route("/api/logout", methods=["GET"])
+@app.route("/api/logout", methods=["POST"])
 def logout():
     global AUTHORIZED
     AWSCLOUD.logout()
@@ -169,11 +164,4 @@ def logout():
 
 @app.errorhandler(404)
 def page_not_found(error):
-    resp = make_response(render_template('page_not_found.html', title="Page Not Found"), 404)
-    # Responses
-    resp.headers["X-Something"] = "A Value"
-    # Cookie
-    resp.set_cookie("username", "the username")
-    # get cookie
-    username = request.cookies.get('username')
-    return resp
+    return {"status_code": 404, "message": "URL is not correct"}
