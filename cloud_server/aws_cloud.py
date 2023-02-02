@@ -24,20 +24,19 @@ def safe_request(foo):
 
 class AWSCloud:
     def __init__(self):
-        self.s3_resource = None
-        self.bucket_for_files = None
-
-    @safe_request
-    def login(self, _login: bool) -> None:
         self.s3_resource = boto3.resource('s3')
         self.bucket_for_files = self.s3_resource.Bucket("files-from-the-test-rest-api")
-        if "files-from-the-test-rest-api" not in [i.name for i in self.s3_resource.buckets.all()] and not _login:
+
+    @safe_request
+    def setup_session(self, _ak_id: str, _sak: str) -> None:
+        boto3.setup_default_session(aws_access_key_id=_ak_id,
+                                    aws_secret_access_key=_sak)
+
+        self.s3_resource = boto3.resource('s3')
+        self.bucket_for_files = self.s3_resource.Bucket("files-from-the-test-rest-api")
+        if "files-from-the-test-rest-api" not in [i.name for i in self.s3_resource.buckets.all()]:
             self.bucket_for_files.create()
-        else:
-            self.s3_resource = None
-            self.bucket_for_files = None
-            boto3.setup_default_session(aws_access_key_id=None,
-                                        aws_secret_access_key=None)
+
         return None
 
     @safe_request
@@ -58,8 +57,8 @@ class AWSCloud:
     def delete_file(self, _key: str) -> None:
         self.bucket_for_files.Object(_key).delete()
 
-    def logout(self):
-        self.s3_resource = None
-        self.bucket_for_files = None
+    def close_session(self):
         boto3.setup_default_session(aws_access_key_id=None,
                                     aws_secret_access_key=None)
+        self.s3_resource = boto3.resource('s3')
+        self.bucket_for_files = self.s3_resource.Bucket("files-from-the-test-rest-api")
