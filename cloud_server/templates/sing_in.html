@@ -6,10 +6,19 @@
 {% endblock children_css_js %}
 
 {% block body %}
-<form action="">
-  <h2><span class="entypo-login"><i class="fa fa-sign-in"></i></span> Sing in</h2>
-  <input type="text" class="user" placeholder="ursername"/>
-  <input type="password" class="pass"placeholder="password"/>
-  <button class="submit"><span class="entypo-lock">Send</i></span></button>
+<form method="post">
+  <h2>Sing up</h2>
+  <span class="hug-input">
+    <input name="login" type="text" class="input-data" placeholder="login"/>
+    {% if errors.login %}
+    <span class="error-message">Login is busy</span>
+    {% else %}
+    {% endif %}
+  </span>
+  <span class="hug-input">
+    <input name="password" type="password" class="input-data"placeholder="password"/>
+  </span>
+
+  <button class="submit"><span class="entypo-lock">Send</span></button>
 </form>
 {% endblock %}
