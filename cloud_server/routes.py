@@ -159,7 +159,7 @@ def get_file(key):
 
 
 @auth_check
-@app.route("/api/logout", method=["GET"])
+@app.route("/api/logout", methods=["GET"])
 def logout():
     global AUTHORIZED
     AWSCLOUD.logout()
