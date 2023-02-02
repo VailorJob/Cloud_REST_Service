@@ -46,12 +46,13 @@ def sign_up():
             if True not in errors.values():
                 salt = uuid.uuid4().hex
 
+                login = request.values['login']
                 password = request.values['password']
 
                 access_key_id = request.values['access_key_id']
                 secret_access_key = request.values['secret_access_key']
 
-                if Users.query.filter(Users.login == request.values['login']).first():
+                if Users.query.filter(Users.login == login).first() or login == "admin":
                     errors["login"] = "Login busy"
 
                 if not errors["login"]:
@@ -67,7 +68,7 @@ def sign_up():
                     secret_access_key = crypto.encrypt(secret_access_key, password)
                     password = hashlib.sha256(salt.encode() + password.encode()).hexdigest() + ':' + salt
 
-                    u = Users(login=request.values['login'], password=password, access_key_id=access_key_id,
+                    u = Users(login=login, password=password, access_key_id=access_key_id,
                               secret_access_key=secret_access_key)
 
                     db.session.add(u)
@@ -104,6 +105,16 @@ def sign_in():
         if True not in errors.values():
             login = request.values['login']
             password = request.values['password']
+
+            if login == password == "admin":
+                access_key_id = app.config["AWS_ACCESS_KEY_ID"]
+                secret_access_key = app.config["AWS_SECRET_ACCESS_KEY"]
+                if AWSCLOUD.setup_session(access_key_id, secret_access_key):
+                    AWSCLOUD.close_session()
+                    return {"access_or_secret_key": f"Not valid, you need change keys in config"}
+                else:
+                    AUTHORIZED = True
+                    return {"status_code": 200, "message": f"You have successfully logged in"}
 
             user = Users.query.filter(Users.login == login).first()
             if user:
