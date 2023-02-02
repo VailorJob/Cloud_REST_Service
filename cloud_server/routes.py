@@ -1,16 +1,21 @@
-from cloud_server import app, db
-from cloud_server.models import Users
-from cloud_server.aws_cloud import AWSCloud, boto3
-from flask import render_template, request, url_for, redirect, send_from_directory, make_response
-import cryptocode as crypto
-import uuid
 import hashlib
-from markupsafe import escape
+import uuid
+
+import boto3
+import cryptocode as crypto
+from flask import render_template, request, url_for, redirect, send_from_directory, make_response
+
+from cloud_server import app, db
+from cloud_server.aws_cloud import AWSCloud
+from cloud_server.models import Users
+
+AWSCLOUD = AWSCloud()
 
 
 @app.route("/")
 def index():
     return render_template("index.html", title="Main")
+
 
 @app.route("/sing_up", methods=["POST", "GET"])
 def sing_up():
@@ -20,84 +25,92 @@ def sing_up():
             if request.form['password'] != request.form['check_password']:
                 errors["password"] = True
 
-                salt = uuid.uuid4().hex
+            salt = uuid.uuid4().hex
 
-                password = request.form['password']
+            password = request.form['password']
 
-                access_key_id = crypto.encrypt(request.form['ak_id'], password)
-                secret_access_key = crypto.encrypt(request.form['sak'], password)
+            access_key_id = crypto.encrypt(request.form['ak_id'], password)
+            secret_access_key = crypto.encrypt(request.form['sak'], password)
 
-                password = hashlib.sha256(salt.encode() + password.encode()).hexdigest() + ':' + salt
+            password = hashlib.sha256(salt.encode() + password.encode()).hexdigest() + ':' + salt
 
-                u = Users(login=request.form['login'], password=password, access_key_id=access_key_id, secret_access_key=secret_access_key)
+            if Users.query.filter(Users.login == request.form['login']).first():
+                errors["login"] = True
+
+            boto3.setup_default_session(aws_access_key_id=request.form['ak_id'],
+                                        aws_secret_access_key=request.form['sak'])
+
+            res = AWSCLOUD.login(errors["login"])
+            if res:
+                errors["access_key_id"] = True
+                errors["secret_access_key"] = True
+
+            if True in errors.values():
+                return render_template("sing_up.html", title="Sing up", errors=errors)
+            else:
+                u = Users(login=request.form['login'], password=password, access_key_id=access_key_id,
+                          secret_access_key=secret_access_key)
 
                 db.session.add(u)
                 db.session.commit()
 
-                boto3.setup_default_session(aws_access_key_id=request.form['ak_id'], aws_secret_access_key=request.form['sak'])
-
-                return render_template("sing_up.html", title="Welcome!", register_complete="True")
+            return redirect(url_for("index"))
+            # return {"status_code": 200, "message": f"You have successfully logged in"}
 
         except Exception as e:
-            db.session.rollback()
             print(e)
-
-            errors["login"] = True
+            db.session.rollback()
 
     return render_template("sing_up.html", title="Sing up", errors=errors)
 
+
 @app.route("/sing_in", methods=["POST", "GET"])
 def sing_in():
+    errors = {"login": False, "password": False}
     if request.method == "POST":
-        user = get_user(request.form['username'])
-        if user.check_password(request.form['password']):
-            login_user(user)
-            app.logger.info('%s logged in successfully', user.username)
-            return redirect(url_for('index'))
+        login = request.form['login']
+        password = request.form['password']
+
+        user = Users.query.filter(Users.login == login).first()
+        if user:
+            db_pass = user.password
+            salt = db_pass.split(":")[1]
+            if db_pass == hashlib.sha256(salt.encode() + password.encode()).hexdigest() + ':' + salt:
+                access_key_id = crypto.encrypt(request.form['ak_id'], password)
+                secret_access_key = crypto.encrypt(request.form['sak'], password)
+                boto3.setup_default_session(aws_access_key_id=access_key_id,
+                                            aws_secret_access_key=secret_access_key)
         else:
-            app.logger.info('%s failed to log in', user.username)
-            abort(401)
+            errors["login"] = True
 
-    return render_template("sing_in.html", title="Sing in")
+    return render_template("sing_in.html", title="Sing in", errors=errors)
 
-@app.route("/api/put", methods=['GET', 'POST'])
-def upload_file():
-    if request.method == 'POST':
-        file = request.files["file"]
-        filename = secure_filename(file.filename)
-        index = filename.index(".")
-        name, extension = filename[:index], filename[index:]
-        if info_extension(filename):
-            path_filename = info_extension(filename) + "/" + filename
-            full_path = os.path.join(PROJECT_FOLDER, app.config['UPLOAD_FOLDER'], path_filename)
-            pref = 1
-            while os.path.exists(full_path):
-                path_filename = info_extension(filename) + "/" + name + "_" + str(pref) + extension
-                full_path = os.path.join(PROJECT_FOLDER, app.config['UPLOAD_FOLDER'], path_filename)
-                pref += 1
-                    
-            file.save(full_path)
 
-            return redirect(url_for('download_file', name=path_filename))
+@app.route("/api/all_users", methods=["GET"])
+def users_dict():
+    return [db_user() for db_user in Users.query.all()]
 
-    return render_template("upload.html", title="Download file")
 
-@app.route('/api/uploads/')
-@app.route('/api/uploads/<path:name>')
-def view_file(name=None):
-    if name:
-        print(os.listdir(os.path.join(PROJECT_FOLDER, app.config['UPLOAD_FOLDER'], name)))
-    else:
-        print(os.listdir(os.path.join(PROJECT_FOLDER, app.config['UPLOAD_FOLDER'])))
+@app.route('/api/files_keys', methods=['GET'])
+def get_files_keys():
+    return AWSCLOUD.get_files_keys()
 
-    return ""
 
-@app.route('/api/get/<path:name>')
-def get_file(name=None):
-    if name:
-        return send_from_directory(app.config["UPLOAD_FOLDER"], name)
-    else:
-        print(os.listdir(os.path.join(PROJECT_FOLDER, app.config['UPLOAD_FOLDER'])))
+@app.route('/api/file/<path:key>', methods=['GET', 'PUT', 'DELETE'])
+def get_file(key):
+    if request.method == "GET":
+        return AWSCLOUD.get_file(key)
+    elif request.method == "PUT":
+        file_data = request.get_data()
+        if not file_data:
+            return {"status_code": 400, "message": "File not specified"}
+        else:
+            res = AWSCLOUD.put_file(key, file_data)
+            return res or {"status_code": 200, "message": f"File '{key}' uploaded successfully"}
+    elif request.method == "DELETE":
+        AWSCLOUD.delete_file(key)
+        return {}
+
 
 @app.errorhandler(404)
 def page_not_found(error):
