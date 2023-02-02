@@ -1,9 +1,8 @@
 import hashlib
 import uuid
 
-import boto3
 import cryptocode as crypto
-from flask import render_template, request, make_response
+from flask import request
 
 from cloud_server import app, db
 from cloud_server.aws_cloud import AWSCloud
@@ -49,26 +48,25 @@ def sign_up():
 
                 password = request.values['password']
 
-                access_key_id = crypto.encrypt(request.values['ak_id'], password)
-                secret_access_key = crypto.encrypt(request.values['sak'], password)
-
-                password = hashlib.sha256(salt.encode() + password.encode()).hexdigest() + ':' + salt
+                access_key_id = request.values['access_key_id']
+                secret_access_key = request.values['secret_access_key']
 
                 if Users.query.filter(Users.login == request.values['login']).first():
                     errors["login"] = "Login busy"
 
-                boto3.setup_default_session(aws_access_key_id=request.values['ak_id'],
-                                            aws_secret_access_key=request.values['sak'])
-
-                res = AWSCLOUD.login(errors["login"])
-                if res:
-                    errors["access_or_secret_key"] = "Not correct"
+                if not errors["login"]:
+                    if AWSCLOUD.setup_session(access_key_id, secret_access_key):
+                        errors["access_or_secret_key"] = "Not correct"
 
                 check_errors = {i: errors[i] for i in errors if errors[i]}
                 if check_errors:
-                    AWSCLOUD.logout()
+                    AWSCLOUD.close_session()
                     return check_errors
                 else:
+                    access_key_id = crypto.encrypt(access_key_id, password)
+                    secret_access_key = crypto.encrypt(secret_access_key, password)
+                    password = hashlib.sha256(salt.encode() + password.encode()).hexdigest() + ':' + salt
+
                     u = Users(login=request.values['login'], password=password, access_key_id=access_key_id,
                               secret_access_key=secret_access_key)
 
@@ -76,13 +74,16 @@ def sign_up():
                     db.session.commit()
 
                     AUTHORIZED = True
-                    return {"status_code": 200, "message": f"You have successfully logged in"}
+
+                return {"status_code": 200, "message": f"You have successfully logged in"}
             else:
                 return {i: f"Value is empty" for i in errors if errors[i]}
 
         except Exception as e:
             print(e)
             db.session.rollback()
+
+            return {"status_code": 500, "message": "DB is not work"}
 
 
 @app.route("/api/sign_in", methods=["POST"])
@@ -111,11 +112,9 @@ def sign_in():
                 if db_pass == hashlib.sha256(salt.encode() + password.encode()).hexdigest() + ':' + salt:
                     access_key_id = crypto.decrypt(user.access_key_id, password)
                     secret_access_key = crypto.decrypt(user.secret_access_key, password)
-                    boto3.setup_default_session(aws_access_key_id=access_key_id,
-                                                aws_secret_access_key=secret_access_key)
-                    res = AWSCLOUD.login(errors["login"])
-                    if res:
-                        AWSCLOUD.logout()
+
+                    if AWSCLOUD.setup_session(access_key_id, secret_access_key):
+                        AWSCLOUD.close_session()
                         db.session.delete(user)
                         db.session.commit()
                         return {"access_or_secret_key": f"Not valid anymore, you can register again"}
@@ -138,7 +137,7 @@ def get_files_keys():
 
 @auth_check
 @app.route('/api/file/<path:key>', methods=['GET', 'PUT', 'DELETE'])
-def get_file(key):
+def get_put_delete_file(key):
     if request.method == "GET":
         return AWSCLOUD.get_file(key)
     elif request.method == "PUT":
@@ -153,13 +152,15 @@ def get_file(key):
         return {}
 
 
-@auth_check
 @app.route("/api/logout", methods=["POST"])
 def logout():
     global AUTHORIZED
-    AWSCLOUD.logout()
+    if not AUTHORIZED:
+        return {"status_code": 401, "message": "Cloud Server. You already unauthorized"}
+
+    AWSCLOUD.close_session()
     AUTHORIZED = False
-    return {}
+    return {"status_code": 200, "message": "You have successfully logged out of your account"}
 
 
 @app.errorhandler(404)
